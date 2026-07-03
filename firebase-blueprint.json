@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "wedding_config": {
+      "title": "Wedding Config",
+      "description": "Configuration settings for the wedding invitation.",
+      "type": "object",
+      "properties": {
+        "names": {
+          "type": "string",
+          "description": "Names of the couple"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of the wedding in ISO format"
+        },
+        "parents": {
+          "type": "string",
+          "description": "Names of the parents"
+        },
+        "googleMapsUrl": {
+          "type": "string",
+          "description": "Google Maps link for the location"
+        },
+        "whatsappNumber": {
+          "type": "string",
+          "description": "WhatsApp number for RSVP"
+        },
+        "whatsappMessage": {
+          "type": "string",
+          "description": "Prefilled message for RSVP"
+        },
+        "musicUrl": {
+          "type": "string",
+          "description": "URL to background music"
+        },
+        "coverImage": {
+          "type": "string",
+          "description": "Background cover image URL"
+        },
+        "eventDetails": {
+          "type": "string",
+          "description": "Details or description of the event"
+        },
+        "placeName": {
+          "type": "string",
+          "description": "Name of the wedding venue"
+        }
+      },
+      "required": [
+        "names",
+        "date",
+        "parents",
+        "googleMapsUrl",
+        "whatsappNumber",
+        "whatsappMessage",
+        "musicUrl"
+      ]
+    }
+  },
+  "firestore": {
+    "/wedding_config/{configId}": {
+      "schema": "wedding_config",
+      "description": "Holds the wedding configuration"
+    }
+  }
+}

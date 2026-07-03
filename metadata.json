@@ -1,0 +1,6 @@
+{
+  "name": "Invitación de Boda",
+  "description": "Invitación de boda interactiva campestre para Oriana y Richard con confirmación por WhatsApp, cuenta regresiva, música instrumental y panel de administración.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
