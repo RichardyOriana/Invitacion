@@ -41,40 +41,50 @@ export default function App() {
     // Real-time listener for the wedding configuration
     const configDocRef = doc(db, "wedding_config", "main");
     
-    const unsubscribe = onSnapshot(configDocRef, async (docSnap) => {
+    const unsubscribe = onSnapshot(configDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as WeddingConfig;
         if (data.musicUrl === "db://chunked" && data.musicChunksCount) {
-          try {
-            const chunkPromises = [];
-            for (let i = 0; i < data.musicChunksCount; i++) {
-              const chunkRef = doc(db, "wedding_config", `music_chunk_${i}`);
-              chunkPromises.push(getDoc(chunkRef));
-            }
-            const chunkSnaps = await Promise.all(chunkPromises);
-            const chunksData = chunkSnaps.map(snap => {
-              if (snap.exists()) {
-                return snap.data().data || "";
-              }
-              return "";
-            });
-            const fullBase64 = chunksData.join("");
-            setConfig({
-              ...data,
-              musicUrl: fullBase64
-            });
-          } catch (e) {
-            console.error("Error loading chunked music:", e);
-            setConfig(data);
+          // Immediately set the configuration with an empty musicUrl so the app is interactive instantly!
+          setConfig({
+            ...data,
+            musicUrl: "" // Empty at first, loads in background
+          });
+          setLoading(false);
+
+          // Fetch chunks asynchronously in the background
+          const chunkPromises = [];
+          for (let i = 0; i < data.musicChunksCount; i++) {
+            const chunkRef = doc(db, "wedding_config", `music_chunk_${i}`);
+            chunkPromises.push(getDoc(chunkRef));
           }
+
+          Promise.all(chunkPromises)
+            .then((chunkSnaps) => {
+              const chunksData = chunkSnaps.map(snap => {
+                if (snap.exists()) {
+                  return snap.data().data || "";
+                }
+                return "";
+              });
+              const fullBase64 = chunksData.join("");
+              setConfig(prev => prev ? {
+                ...prev,
+                musicUrl: fullBase64
+              } : null);
+            })
+            .catch((e) => {
+              console.error("Error loading chunked music in background:", e);
+            });
         } else {
           setConfig(data);
+          setLoading(false);
         }
       } else {
         // Fallback to default config if not initialized in Firestore yet
         setConfig(defaultWeddingConfig);
+        setLoading(false);
       }
-      setLoading(false);
     }, (error) => {
       console.warn("Firestore onSnapshot error (using default config fallback):", error);
       // Fallback locally if Firebase gets blocked or disconnected

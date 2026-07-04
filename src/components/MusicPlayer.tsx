@@ -87,7 +87,13 @@ export default function MusicPlayer({ url }: MusicPlayerProps) {
     };
   }, [url]);
 
-  // Clean up interval on unmount
+  // Keep a ref of resolvedUrl to prevent stale closure bugs in event handlers
+  const resolvedUrlRef = useRef<string>("");
+  useEffect(() => {
+    resolvedUrlRef.current = resolvedUrl;
+  }, [resolvedUrl]);
+
+  // Clean up on unmount
   useEffect(() => {
     return () => {
       clearFadeInterval();
@@ -95,43 +101,136 @@ export default function MusicPlayer({ url }: MusicPlayerProps) {
     };
   }, []);
 
+  // Update source and reload audio when URL changes
   useEffect(() => {
-    // Whenever resolvedUrl changes, update source and reset play state
     if (audioRef.current && resolvedUrl) {
       clearFadeInterval();
       audioRef.current.src = resolvedUrl;
       audioRef.current.load();
       if (isPlaying) {
         audioRef.current.volume = 0;
-        audioRef.current.play().then(() => {
-          fadeIn(audioRef.current!);
-        }).catch((err) => {
-          console.warn("Audio play blocked on URL change:", err);
-          setIsPlaying(false);
-        });
+        audioRef.current.play()
+          .then(() => {
+            fadeIn(audioRef.current!, 6000);
+          })
+          .catch((err) => {
+            console.warn("Audio play blocked on URL change:", err);
+            setIsPlaying(false);
+          });
       }
     }
   }, [resolvedUrl]);
 
-  // Attempt autoplay on first user interaction with the page
+  // Unified play function
+  const playAudio = (withDelay = true) => {
+    clearPlayTimeout();
+    setIsPlaying(true);
+    setHasInteracted(true);
+
+    const audio = audioRef.current;
+    const url = resolvedUrlRef.current;
+
+    if (audio && url) {
+      // Play immediately at volume 0 to authorize/bless playback in the user gesture context
+      audio.volume = 0;
+      audio.play()
+        .then(() => {
+          if (withDelay) {
+            // Elegant delay: wait 3.5 seconds at volume 0, then fade in gradually over 6 seconds
+            console.log("Audio blessed. Waiting 3.5s before starting 6s fade-in...");
+            playTimeoutRef.current = window.setTimeout(() => {
+              fadeIn(audio, 6000);
+            }, 3500);
+          } else {
+            // Play immediately with a 6 seconds fade-in
+            fadeIn(audio, 6000);
+          }
+        })
+        .catch((err) => {
+          console.log("Audio play failed/blocked inside playAudio:", err);
+        });
+    } else {
+      console.log("Audio element or URL not ready yet when playAudio was requested.");
+    }
+  };
+
+  // Autoplay attempt and global user interaction listener
   useEffect(() => {
-    const handleFirstInteraction = () => {
-      if (!hasInteracted && audioRef.current) {
-        setHasInteracted(true);
-        // We don't force play, but we allow play to succeed
-        document.removeEventListener("click", handleFirstInteraction);
-        document.removeEventListener("touchstart", handleFirstInteraction);
+    let hasPlayed = false;
+
+    const attemptAutoplay = () => {
+      if (hasPlayed) return;
+      const audio = audioRef.current;
+      const url = resolvedUrlRef.current;
+
+      if (audio && url) {
+        audio.volume = 0;
+        audio.play()
+          .then(() => {
+            console.log("Autoplay succeeded!");
+            hasPlayed = true;
+            setIsPlaying(true);
+            setHasInteracted(true);
+            // Delay 3.5 seconds at volume 0, then fade in over 6 seconds
+            playTimeoutRef.current = window.setTimeout(() => {
+              fadeIn(audio, 6000);
+            }, 3500);
+            removeListeners();
+          })
+          .catch((err) => {
+            console.log("Autoplay blocked by browser policy. Waiting for user interaction...");
+          });
       }
     };
 
-    document.addEventListener("click", handleFirstInteraction);
-    document.addEventListener("touchstart", handleFirstInteraction);
+    const handleUserInteraction = () => {
+      if (hasPlayed) return;
+      console.log("User interaction detected (anywhere on page), playing background music...");
+      const audio = audioRef.current;
+      const url = resolvedUrlRef.current;
+
+      if (audio && url) {
+        audio.volume = 0;
+        audio.play()
+          .then(() => {
+            hasPlayed = true;
+            setIsPlaying(true);
+            setHasInteracted(true);
+            // Delay 3.5 seconds at volume 0, then fade in over 6 seconds
+            playTimeoutRef.current = window.setTimeout(() => {
+              fadeIn(audio, 6000);
+            }, 3500);
+            removeListeners();
+          })
+          .catch((err) => {
+            console.log("Playback failed on user interaction:", err);
+          });
+      }
+    };
+
+    const removeListeners = () => {
+      document.removeEventListener("click", handleUserInteraction);
+      document.removeEventListener("touchstart", handleUserInteraction);
+      document.removeEventListener("scroll", handleUserInteraction);
+      document.removeEventListener("mousedown", handleUserInteraction);
+    };
+
+    // Attempt to autoplay 1.5 seconds after resolvedUrl is ready
+    const autoplayTimer = window.setTimeout(() => {
+      attemptAutoplay();
+    }, 1500);
+
+    // Listen for any gesture on the document to guarantee playback as early as possible
+    document.addEventListener("click", handleUserInteraction);
+    document.addEventListener("touchstart", handleUserInteraction);
+    document.addEventListener("scroll", handleUserInteraction);
+    document.addEventListener("mousedown", handleUserInteraction);
 
     return () => {
-      document.removeEventListener("click", handleFirstInteraction);
-      document.removeEventListener("touchstart", handleFirstInteraction);
+      window.clearTimeout(autoplayTimer);
+      removeListeners();
     };
-  }, [hasInteracted]);
+  }, [resolvedUrl]); // Re-runs when the URL is ready so we can play the loaded source
 
   // Dispatch state change event to synchronize any inline players
   useEffect(() => {
@@ -149,27 +248,15 @@ export default function MusicPlayer({ url }: MusicPlayerProps) {
     };
   }, [isPlaying]);
 
-  // Support triggering play programmatically on envelope open click with a 3-second elegant delay
+  // Listen to the play event dispatched when the envelope opens (instant responsive play)
   useEffect(() => {
     const startPlaying = () => {
-      clearPlayTimeout();
-      playTimeoutRef.current = window.setTimeout(() => {
-        if (audioRef.current) {
-          audioRef.current.volume = 0;
-          audioRef.current.play()
-            .then(() => {
-              setIsPlaying(true);
-              setHasInteracted(true);
-              fadeIn(audioRef.current!);
-            })
-            .catch((err) => console.log("Auto-play on event blocked:", err));
-        }
-      }, 3000); // Wait 3 seconds before playing the song after opening the invitation
+      console.log("play-wedding-music event received");
+      playAudio(true); // Play with delayed onset and 6s fade-in!
     };
 
     window.addEventListener("play-wedding-music", startPlaying);
     return () => {
-      clearPlayTimeout();
       window.removeEventListener("play-wedding-music", startPlaying);
     };
   }, []);
@@ -184,15 +271,15 @@ export default function MusicPlayer({ url }: MusicPlayerProps) {
       audioRef.current.pause();
       setIsPlaying(false);
     } else {
+      setIsPlaying(true);
       audioRef.current.volume = 0;
       audioRef.current.play()
         .then(() => {
-          setIsPlaying(true);
-          fadeIn(audioRef.current!);
+          fadeIn(audioRef.current!, 6000);
         })
         .catch((error) => {
-          console.error("Playback failed or was blocked:", error);
-          alert("Por favor interactúa con la página antes de reproducir audio, o verifica que el enlace sea de un archivo de audio directo (.mp3).");
+          console.error("Manual playback failed:", error);
+          alert("Por favor interactúa con la página antes de reproducir audio, o verifica que el archivo de audio sea válido.");
         });
     }
   };
