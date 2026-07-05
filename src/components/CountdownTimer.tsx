@@ -14,7 +14,7 @@ export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
   });
 
   const safeParseDate = (dateStr: string): Date => {
-    if (!dateStr) return new Date();
+    if (!dateStr) return new Date("2026-11-27T17:00:00");
     
     // 1. Try standard parser
     let date = new Date(dateStr);
@@ -31,7 +31,7 @@ export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
 
     // 3. Try parsing parts manually (extremely safe for strict mobile engines like Safari)
     // Supports: "YYYY-MM-DDTHH:mm:ss", "YYYY-MM-DD HH:mm", "YYYY/MM/DD HH:mm:ss"
-    const parts = dateStr.split(/[- : T /]/);
+    const parts = dateStr.split(/[- : T /]/i);
     if (parts.length >= 3) {
       const year = parseInt(parts[0], 10);
       const month = parseInt(parts[1], 10) - 1; // months are 0-indexed in JS Date
@@ -46,13 +46,14 @@ export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
       }
     }
     
-    return new Date();
+    // Fallback to wedding date
+    return new Date("2026-11-27T17:00:00");
   };
 
   useEffect(() => {
     const calculateTimeLeft = () => {
       const parsedTarget = safeParseDate(targetDate);
-      const difference = +parsedTarget - +new Date();
+      const difference = parsedTarget.getTime() - Date.now();
       
       if (difference <= 0 || isNaN(difference)) {
         setTimeLeft({
@@ -65,11 +66,21 @@ export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
         return;
       }
 
+      // Safe, step-by-step integer arithmetic (avoids floating-point modulo quirks)
+      const totalSeconds = Math.floor(difference / 1000);
+      const totalMinutes = Math.floor(totalSeconds / 60);
+      const totalHours = Math.floor(totalMinutes / 60);
+      
+      const days = Math.floor(totalHours / 24);
+      const hours = totalHours % 24;
+      const minutes = totalMinutes % 60;
+      const seconds = totalSeconds % 60;
+
       setTimeLeft({
-        days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-        hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-        minutes: Math.floor((difference / 1000 / 60) % 60),
-        seconds: Math.floor((difference / 1000) % 60),
+        days,
+        hours,
+        minutes,
+        seconds,
         isOver: false,
       });
     };
